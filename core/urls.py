@@ -30,5 +30,5 @@ urlpatterns = [
     path('api/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
 
     # Aquí irán luego tus rutas personalizadas
-    # path('api/miembros/', include('miembros.urls')),
+    path('api/miembros/', include('miembros.urls')),
 ]

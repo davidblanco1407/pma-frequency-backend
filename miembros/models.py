@@ -7,59 +7,7 @@ from phonenumber_field.modelfields import PhoneNumberField
 
 
 class Miembro(models.Model):
-    """
-    Modelo que representa a un miembro registrado en la comunidad PMA Frequency.
-    Incluye datos personales, estado y control de reactivación en caso de inactividad,
-    junto con trazabilidad sobre quién lo desactivó y cuándo.
-    """
-
-    nombre_completo = models.CharField(
-        max_length=100,
-        verbose_name="Nombre completo",
-        help_text="Nombre completo del miembro. Máximo 100 caracteres."
-    )
-
-    email = models.EmailField(
-        unique=True,
-        verbose_name="Correo electrónico",
-        help_text="Correo único del miembro. Se usará como identificador de contacto."
-    )
-
-    telefono = PhoneNumberField(
-        region='CO',
-        verbose_name="Número de teléfono",
-        help_text="Número válido en formato colombiano o internacional. Requiere código de país."
-    )
-
-    activo = models.BooleanField(
-        default=True,
-        verbose_name="¿Está activo?",
-        help_text="Define si el miembro está actualmente activo en la comunidad."
-    )
-
-    puede_volver = models.BooleanField(
-        null=True,
-        blank=True,
-        verbose_name="¿Puede volver?",
-        help_text="Solo aplicable si el miembro ha sido desactivado. Indica si puede reingresar."
-    )
-
-    fecha_desactivacion = models.DateTimeField(
-        null=True,
-        blank=True,
-        verbose_name="Fecha de desactivación",
-        help_text="Fecha y hora en que el miembro fue marcado como inactivo."
-    )
-
-    desactivado_por = models.ForeignKey(
-        get_user_model(),
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        verbose_name="Desactivado por",
-        help_text="Usuario responsable de la desactivación del miembro."
-    )
-
+    ...
     fecha_registro = models.DateTimeField(
         auto_now_add=True,
         verbose_name="Fecha de registro",
@@ -77,13 +25,24 @@ class Miembro(models.Model):
 
     def save(self, *args, **kwargs):
         """
-        Registra automáticamente la fecha de desactivación si el miembro es marcado como inactivo.
+        Controla la lógica de activación/desactivación:
+        - Si se desactiva, guarda la fecha y limpia estado anterior.
+        - Si se intenta reactivar y el miembro NO puede volver, solo el superusuario puede hacerlo.
         """
-        if not self.activo and self.fecha_desactivacion is None:
-            self.fecha_desactivacion = timezone.now()
-        elif self.activo:
+        user = kwargs.pop('user', None)
+
+        if self.activo:
+            if self.puede_volver is False:
+                if user is None or not user.is_superuser:
+                    raise ValidationError("Este miembro no puede ser reactivado. Solo un superusuario puede hacerlo.")
             self.fecha_desactivacion = None
             self.desactivado_por = None
+        else:
+            if self.fecha_desactivacion is None:
+                self.fecha_desactivacion = timezone.now()
+            if user and not self.desactivado_por:
+                self.desactivado_por = user
+
         super().save(*args, **kwargs)
 
     def __str__(self):
