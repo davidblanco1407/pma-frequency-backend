@@ -7,28 +7,46 @@ from phonenumber_field.modelfields import PhoneNumberField
 
 
 class Miembro(models.Model):
-    ...
-    fecha_registro = models.DateTimeField(
-        auto_now_add=True,
-        verbose_name="Fecha de registro",
-        help_text="Fecha y hora en que se registró el miembro en el sistema."
+    """
+    Modelo que representa a un miembro registrado en la comunidad PMA Frequency.
+    """
+
+    nombre_completo = models.CharField(
+        max_length=100,
+        verbose_name="Nombre completo",
+        help_text="Nombre completo del miembro. Máximo 100 caracteres."
+    )
+
+    email = models.EmailField(
+        unique=True,
+        verbose_name="Correo electrónico",
+        help_text="Correo único del miembro. Se usará como identificador de contacto."
+    )
+
+    telefono = PhoneNumberField(
+        region='CO',
+        verbose_name="Número de teléfono",
+        help_text="Número válido en formato colombiano o internacional. Requiere código de país."
+    )
+
+    activo = models.BooleanField(default=True)
+    puede_volver = models.BooleanField(null=True, blank=True)
+    fecha_registro = models.DateTimeField(auto_now_add=True)
+    fecha_desactivacion = models.DateTimeField(null=True, blank=True)
+    desactivado_por = models.ForeignKey(
+        get_user_model(),
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True
     )
 
     def clean(self):
-        """
-        Valida que si el miembro está inactivo, se especifique si puede volver o no.
-        """
         if not self.activo and self.puede_volver is None:
             raise ValidationError({
                 'puede_volver': "Debes indicar si el miembro puede volver cuando está inactivo."
             })
 
     def save(self, *args, **kwargs):
-        """
-        Controla la lógica de activación/desactivación:
-        - Si se desactiva, guarda la fecha y limpia estado anterior.
-        - Si se intenta reactivar y el miembro NO puede volver, solo el superusuario puede hacerlo.
-        """
         user = kwargs.pop('user', None)
 
         if self.activo:
@@ -52,7 +70,6 @@ class Miembro(models.Model):
         verbose_name = "Miembro"
         verbose_name_plural = "Miembros"
         ordering = ['nombre_completo']
-
 
 class Sancion(models.Model):
     """

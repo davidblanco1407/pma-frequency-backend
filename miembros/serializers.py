@@ -1,21 +1,69 @@
 from rest_framework import serializers
+from django.contrib.auth.models import User
+from django.core.mail import send_mail
+from django.utils.crypto import get_random_string
 from .models import Miembro, Sancion, SolicitudCorreccion
 
 
 class MiembroSerializer(serializers.ModelSerializer):
     """
-    Serializador para Miembro con control de lectura en campos protegidos
-    y validación personalizada para control de activación por superusuarios.
+    Serializador para Miembro con creación automática de usuario y envío de contraseña por correo.
+    También incluye validaciones para activación por superusuario y campos de solo lectura.
     """
     class Meta:
         model = Miembro
         fields = '__all__'
         read_only_fields = ['fecha_registro', 'fecha_desactivacion', 'desactivado_por']
 
+    def create(self, validated_data):
+        email = validated_data.get('email')
+        nombre = validated_data.get('nombre_completo')
+
+        if User.objects.filter(email=email).exists():
+            raise serializers.ValidationError("Ya existe un usuario con este correo.")
+
+        # Generar username y contraseña aleatoria
+        username = email.split('@')[0]
+        password = get_random_string(length=10)
+
+        # Crear el usuario
+        User.objects.create_user(
+            username=username,
+            email=email,
+            password=password,
+            is_staff=False  # el miembro NO es admin
+        )
+
+        # Crear el miembro
+        miembro = Miembro.objects.create(**validated_data)
+
+        # Enviar correo con contraseña
+        send_mail(
+            subject="¡Bienvenido a PMA Frequency 🎧!",
+            message=f"""
+Hola {nombre},
+
+Has sido registrado como miembro en la comunidad PMA Frequency.
+
+Tus credenciales de acceso:
+
+📧 Usuario: {email}
+🔑 Contraseña temporal: {password}
+
+Por favor, inicia sesión y cambia tu contraseña cuanto antes.
+
+— El equipo de PMA Frequency
+""",
+            from_email=None,  # usa DEFAULT_FROM_EMAIL
+            recipient_list=[email],
+            fail_silently=False
+        )
+
+        return miembro
+
     def update(self, instance, validated_data):
         """
-        Sobrescribe el método update para pasar el usuario autenticado
-        al método save(), lo que permite aplicar reglas de reactivación.
+        Actualización con paso del usuario autenticado para control de reactivación.
         """
         user = self.context['request'].user
         for attr, value in validated_data.items():
