@@ -30,9 +30,16 @@ class Miembro(models.Model):
     )
 
     activo = models.BooleanField(default=True)
-    puede_volver = models.BooleanField(null=True, blank=True)
+
+    puede_volver = models.BooleanField(
+        default=True,
+        verbose_name="¿Puede volver?",
+        help_text="Indica si el miembro puede ser reactivado en el futuro."
+    )
+
     fecha_registro = models.DateTimeField(auto_now_add=True)
     fecha_desactivacion = models.DateTimeField(null=True, blank=True)
+
     desactivado_por = models.ForeignKey(
         get_user_model(),
         on_delete=models.SET_NULL,
@@ -40,22 +47,18 @@ class Miembro(models.Model):
         blank=True
     )
 
-    def clean(self):
-        if not self.activo and self.puede_volver is None:
-            raise ValidationError({
-                'puede_volver': "Debes indicar si el miembro puede volver cuando está inactivo."
-            })
-
     def save(self, *args, **kwargs):
         user = kwargs.pop('user', None)
 
         if self.activo:
+            # Validación: si no puede volver, solo el superusuario puede reactivarlo
             if self.puede_volver is False:
                 if user is None or not user.is_superuser:
                     raise ValidationError("Este miembro no puede ser reactivado. Solo un superusuario puede hacerlo.")
             self.fecha_desactivacion = None
             self.desactivado_por = None
         else:
+            # Desactivación
             if self.fecha_desactivacion is None:
                 self.fecha_desactivacion = timezone.now()
             if user and not self.desactivado_por:
@@ -70,6 +73,7 @@ class Miembro(models.Model):
         verbose_name = "Miembro"
         verbose_name_plural = "Miembros"
         ordering = ['nombre_completo']
+
 
 class Sancion(models.Model):
     """

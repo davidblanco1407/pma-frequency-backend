@@ -2,17 +2,24 @@ from rest_framework import viewsets, permissions, status
 from rest_framework.exceptions import PermissionDenied
 from rest_framework.views import APIView
 from rest_framework.response import Response
-from .models import Miembro, Sancion, SolicitudCorreccion
-from .serializers import MiembroSerializer, SancionSerializer, SolicitudCorreccionSerializer
-
+from rest_framework.generics import RetrieveAPIView
 from django.core.mail import send_mail
 from django.utils.http import urlsafe_base64_encode, urlsafe_base64_decode
 from django.utils.encoding import force_bytes, force_str
 from django.contrib.auth.tokens import default_token_generator
 from django.contrib.auth.models import User
+from django.contrib.auth.password_validation import validate_password
+from django.core.exceptions import ValidationError as DjangoValidationError
 from django.conf import settings
 from decouple import config
+from .models import Miembro, Sancion, SolicitudCorreccion
+from .serializers import MiembroSerializer, SancionSerializer, SolicitudCorreccionSerializer
+from rest_framework_simplejwt.views import TokenObtainPairView
+from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
+from rest_framework_simplejwt.exceptions import AuthenticationFailed
 
+
+# --------------------- PERMISOS PERSONALIZADOS ---------------------
 
 class IsAdminOrReadOnly(permissions.BasePermission):
     def has_permission(self, request, view):
@@ -26,18 +33,66 @@ class IsSuperUserOnly(permissions.BasePermission):
         return request.user and request.user.is_superuser
 
 
+# --------------------- JWT PERSONALIZADO ---------------------
+
+class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
+    def validate(self, attrs):
+        data = super().validate(attrs)
+        user = self.user
+
+        if not user.is_superuser:
+            try:
+                miembro = Miembro.objects.get(email=user.email)
+                if not miembro.activo:
+                    raise AuthenticationFailed("Tu cuenta está desactivada. Contacta con un administrador.")
+            except Miembro.DoesNotExist:
+                raise AuthenticationFailed("No se encontró un perfil de miembro asociado a este usuario.")
+
+        return data
+
+
+class CustomTokenObtainPairView(TokenObtainPairView):
+    serializer_class = CustomTokenObtainPairSerializer
+
+
+# --------------------- VIEWS PRINCIPALES ---------------------
+
 class MiembroViewSet(viewsets.ModelViewSet):
     serializer_class = MiembroSerializer
-    permission_classes = [IsAdminOrReadOnly]
+    permission_classes = [permissions.IsAuthenticated]
 
     def get_queryset(self):
         user = self.request.user
-        if user.is_staff:
+        if user.is_superuser or user.is_staff:
             return Miembro.objects.all()
         return Miembro.objects.filter(email=user.email)
 
+    def perform_create(self, serializer):
+        user = self.request.user
+        if not user.is_superuser:
+            raise PermissionDenied("Solo el superusuario puede crear nuevos miembros.")
+        serializer.save()
+
+    def perform_update(self, serializer):
+        user = self.request.user
+        instance = self.get_object()
+        # Validación para reactivar miembros
+        if instance.activo is False and serializer.validated_data.get("activo", True):
+            if not instance.puede_volver and not user.is_superuser:
+                raise PermissionDenied("Este miembro no puede ser reactivado. Contacte con soporte para más información.")
+        serializer.save(user=user)
+
     def perform_destroy(self, instance):
         raise PermissionDenied("No está permitido eliminar miembros. Solo pueden ser desactivados.")
+
+
+class VerMiPerfilView(RetrieveAPIView):
+    serializer_class = MiembroSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_object(self):
+        user = self.request.user
+        return Miembro.objects.get(email=user.email)
 
 
 class SancionViewSet(viewsets.ModelViewSet):
@@ -52,7 +107,7 @@ class SolicitudCorreccionViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         user = self.request.user
-        if user.is_staff:
+        if user.is_superuser or user.is_staff:
             return SolicitudCorreccion.objects.all()
         return SolicitudCorreccion.objects.filter(miembro__email=user.email)
 
@@ -62,6 +117,8 @@ class SolicitudCorreccionViewSet(viewsets.ModelViewSet):
             raise PermissionDenied("Solo los administradores pueden actualizar solicitudes.")
         serializer.save()
 
+
+# --------------------- CAMBIO DE CONTRASEÑA ---------------------
 
 class CambiarPasswordView(APIView):
     permission_classes = [permissions.IsAuthenticated]
@@ -78,10 +135,17 @@ class CambiarPasswordView(APIView):
         if nueva != confirmar:
             return Response({'error': 'Las contraseñas nuevas no coinciden.'}, status=400)
 
+        try:
+            validate_password(nueva, user=user)
+        except DjangoValidationError as e:
+            return Response({'error': e.messages}, status=400)
+
         user.set_password(nueva)
         user.save()
         return Response({'mensaje': 'Contraseña actualizada correctamente.'}, status=200)
 
+
+# --------------------- RECUPERACIÓN DE CONTRASEÑA ---------------------
 
 class EnviarCorreoResetPasswordView(APIView):
     def post(self, request):
@@ -125,6 +189,11 @@ class ResetPasswordConfirmView(APIView):
 
         if not default_token_generator.check_token(user, token):
             return Response({'error': 'El token no es válido o ha expirado.'}, status=400)
+
+        try:
+            validate_password(nueva, user=user)
+        except DjangoValidationError as e:
+            return Response({'error': e.messages}, status=400)
 
         user.set_password(nueva)
         user.save()

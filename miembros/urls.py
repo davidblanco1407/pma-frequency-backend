@@ -6,7 +6,8 @@ from .views import (
     SolicitudCorreccionViewSet,
     CambiarPasswordView,
     EnviarCorreoResetPasswordView,
-    ResetPasswordConfirmView
+    ResetPasswordConfirmView,
+    VerMiPerfilView
 )
 
 router = DefaultRouter()
@@ -16,6 +17,7 @@ router.register(r'solicitudes', SolicitudCorreccionViewSet, basename='solicitud'
 
 urlpatterns = [
     path('', include(router.urls)),
+    path('mi-perfil/', VerMiPerfilView.as_view(), name='mi-perfil'),
     path('cambiar-password/', CambiarPasswordView.as_view(), name='cambiar-password'),
     path('recuperar-password/', EnviarCorreoResetPasswordView.as_view(), name='recuperar-password'),
     path('reset-password/<uidb64>/<token>/', ResetPasswordConfirmView.as_view(), name='reset-password'),

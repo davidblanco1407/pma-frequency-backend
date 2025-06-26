@@ -23,7 +23,12 @@ class MiembroSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError("Ya existe un usuario con este correo.")
 
         # Generar username y contraseña aleatoria
-        username = email.split('@')[0]
+        base_username = email.split('@')[0]
+        username = base_username
+        i = 1
+        while User.objects.filter(username=username).exists():
+            username = f"{base_username}{i}"
+            i += 1
         password = get_random_string(length=10)
 
         # Crear el usuario
