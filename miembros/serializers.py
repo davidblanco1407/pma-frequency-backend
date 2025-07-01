@@ -5,10 +5,44 @@ from .utils import crear_usuario_para_miembro, enviar_correo_bienvenida
 
 
 class MiembroSerializer(serializers.ModelSerializer):
+    """
+    Serializer para el modelo Miembro. Incluye la creación
+    de usuario de Django, el envío de correo de bienvenida y
+    devuelve también el rol del usuario (staff y superuser).
+    """
+    is_staff = serializers.SerializerMethodField()
+    is_superuser = serializers.SerializerMethodField()
+
     class Meta:
         model = Miembro
-        fields = '__all__'
+        fields = [
+            'id',
+            'nombre_completo',
+            'email',
+            'telefono',
+            'activo',
+            'puede_volver',
+            'fecha_registro',
+            'fecha_desactivacion',
+            'desactivado_por',
+            'is_staff',
+            'is_superuser',
+        ]
         read_only_fields = ['fecha_registro', 'fecha_desactivacion', 'desactivado_por']
+
+    def get_is_staff(self, obj):
+        try:
+            user = User.objects.get(email=obj.email)
+            return user.is_staff
+        except User.DoesNotExist:
+            return False
+
+    def get_is_superuser(self, obj):
+        try:
+            user = User.objects.get(email=obj.email)
+            return user.is_superuser
+        except User.DoesNotExist:
+            return False
 
     def create(self, validated_data):
         email = validated_data.get('email')
@@ -17,9 +51,9 @@ class MiembroSerializer(serializers.ModelSerializer):
         if User.objects.filter(email=email).exists():
             raise serializers.ValidationError("Ya existe un usuario con este correo.")
 
-        user, password = crear_usuario_para_miembro(email)
+        user, password, username = crear_usuario_para_miembro(email, nombre)
         miembro = Miembro.objects.create(**validated_data)
-        enviar_correo_bienvenida(nombre, email, password)
+        enviar_correo_bienvenida(nombre, username, email, password)
         return miembro
 
     def update(self, instance, validated_data):
@@ -31,6 +65,10 @@ class MiembroSerializer(serializers.ModelSerializer):
 
 
 class SancionSerializer(serializers.ModelSerializer):
+    """
+    Serializer para el modelo Sancion. Asigna automáticamente
+    el usuario que impone la sanción.
+    """
     miembro_nombre = serializers.CharField(source='miembro.nombre_completo', read_only=True)
 
     class Meta:
@@ -45,6 +83,10 @@ class SancionSerializer(serializers.ModelSerializer):
 
 
 class SolicitudCorreccionSerializer(serializers.ModelSerializer):
+    """
+    Serializer para el modelo SolicitudCorreccion. Asocia
+    automáticamente la solicitud al miembro autenticado.
+    """
     miembro_nombre = serializers.CharField(source='miembro.nombre_completo', read_only=True)
 
     class Meta:
