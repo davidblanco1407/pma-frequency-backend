@@ -102,3 +102,13 @@ class SolicitudCorreccionSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError("No se encontró un perfil de miembro asociado a este usuario.")
         validated_data['miembro'] = miembro
         return super().create(validated_data)
+
+#Serializer para filtros
+class MiembroFiltroSerializer(serializers.Serializer):
+    nombre = serializers.CharField(required=False)
+    email = serializers.EmailField(required=False)
+    telefono = serializers.CharField(required=False)
+    activo = serializers.BooleanField(required=False)
+    puede_volver = serializers.BooleanField(required=False)
+    fecha_desde = serializers.DateField(required=False)
+    fecha_hasta = serializers.DateField(required=False)

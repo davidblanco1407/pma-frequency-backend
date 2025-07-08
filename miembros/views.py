@@ -13,7 +13,12 @@ from django.core.exceptions import ValidationError as DjangoValidationError
 from django.conf import settings
 from decouple import config
 from .models import Miembro, Sancion, SolicitudCorreccion
-from .serializers import MiembroSerializer, SancionSerializer, SolicitudCorreccionSerializer
+from .serializers import (
+    MiembroSerializer,
+    SancionSerializer,
+    SolicitudCorreccionSerializer,
+MiembroFiltroSerializer,
+)
 from rest_framework_simplejwt.views import TokenObtainPairView
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from rest_framework_simplejwt.exceptions import AuthenticationFailed
@@ -54,7 +59,6 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
 class CustomTokenObtainPairView(TokenObtainPairView):
     serializer_class = CustomTokenObtainPairSerializer
 
-
 # --------------------- VIEWS PRINCIPALES ---------------------
 
 class MiembroViewSet(viewsets.ModelViewSet):
@@ -76,10 +80,9 @@ class MiembroViewSet(viewsets.ModelViewSet):
     def perform_update(self, serializer):
         user = self.request.user
         instance = self.get_object()
-        # Validación para reactivar miembros
         if instance.activo is False and serializer.validated_data.get("activo", True):
             if not instance.puede_volver and not user.is_superuser:
-                raise PermissionDenied("Este miembro no puede ser reactivado. Contacte con soporte para más información.")
+                raise PermissionDenied("Este miembro no puede ser reactivado. Contacte con soporte.")
         serializer.save(user=user)
 
     def perform_destroy(self, instance):
@@ -118,6 +121,48 @@ class SolicitudCorreccionViewSet(viewsets.ModelViewSet):
         serializer.save()
 
 
+# --------------------- NUEVA VISTA: FILTRADO DE MIEMBROS ---------------------
+
+class FiltrarMiembrosView(APIView):
+    """
+    Vista para filtrar miembros usando parámetros enviados por POST.
+    Solo disponible para administradores.
+    """
+
+    permission_classes = [permissions.IsAdminUser]
+
+    def post(self, request):
+        serializer = MiembroFiltroSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        filtros = serializer.validated_data
+
+        miembros = Miembro.objects.all()
+
+        if filtros.get('nombre'):
+            miembros = miembros.filter(nombre_completo__icontains=filtros['nombre'])
+
+        if filtros.get('email'):
+            miembros = miembros.filter(email__icontains=filtros['email'])
+
+        if filtros.get('telefono'):
+            miembros = miembros.filter(telefono__icontains=filtros['telefono'])
+
+        if 'activo' in filtros:
+            miembros = miembros.filter(activo=filtros['activo'])
+
+        if 'puede_volver' in filtros:
+            miembros = miembros.filter(puede_volver=filtros['puede_volver'])
+
+        if filtros.get('fecha_desde'):
+            miembros = miembros.filter(fecha_registro__date__gte=filtros['fecha_desde'])
+
+        if filtros.get('fecha_hasta'):
+            miembros = miembros.filter(fecha_registro__date__lte=filtros['fecha_hasta'])
+
+        resultado = MiembroSerializer(miembros, many=True)
+        return Response(resultado.data)
+
+
 # --------------------- CAMBIO DE CONTRASEÑA ---------------------
 
 class CambiarPasswordView(APIView):
@@ -142,7 +187,7 @@ class CambiarPasswordView(APIView):
 
         user.set_password(nueva)
         user.save()
-        return Response({'mensaje': 'Contraseña actualizada correctamente.'}, status=200)
+        return Response({'mensaje': 'Contraseña actualizada correctamente.'})
 
 
 # --------------------- RECUPERACIÓN DE CONTRASEÑA ---------------------
