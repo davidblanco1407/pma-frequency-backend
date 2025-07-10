@@ -1,5 +1,6 @@
 from rest_framework import viewsets, permissions, status
-from rest_framework.exceptions import PermissionDenied
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.exceptions import PermissionDenied, NotFound
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.generics import RetrieveAPIView
@@ -73,8 +74,8 @@ class MiembroViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         user = self.request.user
-        if not user.is_superuser:
-            raise PermissionDenied("Solo el superusuario puede crear nuevos miembros.")
+        if not (user.is_superuser or user.is_staff):
+            raise PermissionDenied("Solo el administrador o superusuario puede crear nuevos miembros.")
         serializer.save()
 
     def perform_update(self, serializer):
@@ -90,12 +91,19 @@ class MiembroViewSet(viewsets.ModelViewSet):
 
 
 class VerMiPerfilView(RetrieveAPIView):
+    """
+    Devuelve el perfil del miembro autenticado, basado en su correo.
+    Solo disponible para usuarios autenticados.
+    """
     serializer_class = MiembroSerializer
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [IsAuthenticated]
 
     def get_object(self):
         user = self.request.user
-        return Miembro.objects.get(email=user.email)
+        miembro = Miembro.objects.filter(email=user.email).first()
+        if not miembro:
+            raise NotFound("No se encontró tu perfil como miembro.")
+        return miembro
 
 
 class SancionViewSet(viewsets.ModelViewSet):
@@ -243,3 +251,19 @@ class ResetPasswordConfirmView(APIView):
         user.set_password(nueva)
         user.save()
         return Response({'mensaje': 'Contraseña restablecida correctamente.'})
+
+
+class EstadisticasView(APIView):
+    permission_classes = [permissions.IsAdminUser]
+
+    def get(self, request):
+        activos = Miembro.objects.filter(activo=True).count()
+        inactivos = Miembro.objects.filter(activo=False, puede_volver=True).count()
+        bloqueados = Miembro.objects.filter(activo=False, puede_volver=False).count()
+
+        return Response({
+            "activos": activos,
+            "inactivos": inactivos,
+            "bloqueados": bloqueados
+        })
+    

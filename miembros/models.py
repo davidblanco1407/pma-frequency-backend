@@ -23,6 +23,12 @@ class Miembro(models.Model):
         help_text="Correo único del miembro. Se usará como identificador de contacto."
     )
 
+    pais = models.CharField(
+        max_length=50,
+        verbose_name="País",
+        help_text="País de residencia del miembro. Máximo 50 caracteres."
+    )
+
     telefono = PhoneNumberField(
         region='CO',
         verbose_name="Número de teléfono",

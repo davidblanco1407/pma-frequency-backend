@@ -51,17 +51,17 @@ class MiembroAdmin(admin.ModelAdmin):
     Incluye acciones personalizadas y visualización clara de estado.
     """
     list_display = (
-        'nombre_completo', 'email', 'telefono', 'activo', 'puede_volver',
+        'nombre_completo', 'email', 'pais', 'telefono', 'activo', 'puede_volver',
         'fecha_registro', 'estado_visual'
     )
     list_filter = ('activo', 'puede_volver', 'fecha_registro')
-    search_fields = ('nombre_completo', 'email', 'telefono')
+    search_fields = ('nombre_completo', 'email','pais', 'telefono')
     readonly_fields = ('fecha_registro', 'fecha_desactivacion', 'desactivado_por')
     ordering = ('-fecha_registro',)
     actions = [reactivar_miembros, desactivar_miembros_temporal, desactivar_miembros_permanente]
     fieldsets = (
         (None, {
-            'fields': ('nombre_completo', 'email', 'telefono', 'activo', 'puede_volver')
+            'fields': ('nombre_completo', 'email', 'pais', 'telefono', 'activo', 'puede_volver')
         }),
         ('Historial', {
             'fields': ('fecha_registro', 'fecha_desactivacion', 'desactivado_por'),

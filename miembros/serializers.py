@@ -19,6 +19,7 @@ class MiembroSerializer(serializers.ModelSerializer):
             'id',
             'nombre_completo',
             'email',
+            'pais',
             'telefono',
             'activo',
             'puede_volver',
@@ -92,7 +93,7 @@ class SolicitudCorreccionSerializer(serializers.ModelSerializer):
     class Meta:
         model = SolicitudCorreccion
         fields = '__all__'
-        read_only_fields = ['fecha', 'estado', 'respuesta', 'miembro_nombre']
+        read_only_fields = ['fecha', 'estado', 'respuesta', 'miembro', 'miembro_nombre']
 
     def create(self, validated_data):
         user = self.context['request'].user
